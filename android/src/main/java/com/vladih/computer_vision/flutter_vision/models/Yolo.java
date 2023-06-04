@@ -11,8 +11,11 @@ import org.tensorflow.lite.gpu.CompatibilityList;
 import org.tensorflow.lite.gpu.GpuDelegate;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
@@ -129,7 +132,7 @@ public class Yolo {
         for (int i = 0; i < interpreter.getOutputTensorCount(); i++) {
             shapes.add(format("Output tensor #%s has shape: %s", i, Arrays.toString(interpreter.getOutputTensor(i).shape())));
         }
-        System.out.printf("Shapes retrieved: %s.%n", shapes);
+        Log.i("printShapes", format("Shapes retrieved: %s.%n", shapes));
     }
 
     protected Vector<String> load_labels(AssetManager asset_manager, String label_path) throws Exception {
@@ -155,16 +158,57 @@ public class Yolo {
         }
     }
 
+    public void appendOutput() {
+        appendLog("Output size: " + this.output[0].length + ":" + this.output[0][0].length + ", third dimension:" + this.output[0][0][0]);
+        for (int i = 0; i < this.output[0].length; i++) {
+            appendLog(Arrays.deepToString(this.output[i]));
+            for (int j = 0; j < this.output[i][0].length; j++) {
+                appendLog("###" + Arrays.toString(this.output[i][j]));
+            }
+        }
+    }
+
+    public void appendLog(String text) {
+        File logFile = new File(this.context.getExternalFilesDir("txt"), "flutter_vision_log.txt");
+        if (!logFile.exists()) {
+            try {
+                logFile.createNewFile();
+            } catch (IOException e) {
+                Log.e("appendLog", "Cannot create file:", e);
+            }
+        }
+        try {
+            //BufferedWriter for performance, true to set append to file flag
+            BufferedWriter buf = new BufferedWriter(new FileWriter(logFile, true));
+            buf.append(text);
+            buf.newLine();
+            buf.close();
+        } catch (IOException e) {
+            Log.e("appendLog", "Cannot write to file:", e);
+        }
+    }
+
     public List<Map<String, Object>> detect_task(ByteBuffer byteBuffer,
                                                  int source_height,
                                                  int source_width,
                                                  float iou_threshold,
                                                  float conf_threshold, float class_threshold) throws Exception {
         try {
+            Log.i("detect_task", "Running interpreter: Creating arrays...");
             int[] shape = this.interpreter.getInputTensor(0).shape();
+//            int[] tempShape1 = this.interpreter.getOutputTensor(0).shape();
+//            int[] tempShape2 = this.interpreter.getOutputTensor(1).shape();
+//            float[][][][][] tempOut = new float[tempShape1[0]][tempShape1[1]][tempShape1[2]][tempShape2[0]][tempShape2[1]];
+            Log.i("detect_task", "Running interpreter...");
             this.interpreter.run(byteBuffer, this.output);
+            Log.i("detect_task", "Ran interpreter...");
+            Log.i("detect_task", format("Output: %s", Arrays.deepToString(this.output)));
+            appendLog(format("Output: %s", Arrays.deepToString(this.output)));
             List<float[]> boxes = filter_box(this.output, iou_threshold, conf_threshold, class_threshold, shape[1], shape[2]);
             boxes = restore_size(boxes, shape[1], shape[2], source_width, source_height);
+            Log.i("detect_task", format("Boxes: %s", Arrays.deepToString(boxes.toArray())));
+            appendLog(format("Boxes: %s", Arrays.deepToString(boxes.toArray())));
+            appendOutput();
             return out(boxes, this.labels);
         } catch (Exception e) {
             throw e;
