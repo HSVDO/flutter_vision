@@ -76,8 +76,11 @@ public class Yolov8 extends Yolo {
             for (float[] box : yolo_result) {
                 Map<String, Object> output = new HashMap<>();
                 output.put("box", new float[]{box[0], box[1], box[2], box[3], box[4]}); //x1,y1,x2,y2,conf_class
-//                output.put("tag",labels.get((int)box[5]));
-                output.put("tag", "unknown");
+                try {
+                    output.put("tag", labels.get((int) box[5]));
+                } catch (ArrayIndexOutOfBoundsException e) {
+                    output.put("tag", "AIOOBE:" + box[5]);
+                }
                 result.add(output);
             }
             return result;
