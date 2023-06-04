@@ -196,19 +196,16 @@ public class Yolo {
         try {
             Log.i("detect_task", "Running interpreter: Creating arrays...");
             int[] shape = this.interpreter.getInputTensor(0).shape();
-//            int[] tempShape1 = this.interpreter.getOutputTensor(0).shape();
-//            int[] tempShape2 = this.interpreter.getOutputTensor(1).shape();
-//            float[][][][][] tempOut = new float[tempShape1[0]][tempShape1[1]][tempShape1[2]][tempShape2[0]][tempShape2[1]];
             Log.i("detect_task", "Running interpreter...");
             this.interpreter.run(byteBuffer, this.output);
             Log.i("detect_task", "Ran interpreter...");
             Log.i("detect_task", format("Output: %s", Arrays.deepToString(this.output)));
-            appendLog(format("Output: %s", Arrays.deepToString(this.output)));
+//            appendLog(format("Output: %s", Arrays.deepToString(this.output)));
             List<float[]> boxes = filter_box(this.output, iou_threshold, conf_threshold, class_threshold, shape[1], shape[2]);
             boxes = restore_size(boxes, shape[1], shape[2], source_width, source_height);
             Log.i("detect_task", format("Boxes: %s", Arrays.deepToString(boxes.toArray())));
-            appendLog(format("Boxes: %s", Arrays.deepToString(boxes.toArray())));
-            appendOutput();
+//            appendLog(format("Boxes: %s", Arrays.deepToString(boxes.toArray())));
+//            appendOutput();
             return out(boxes, this.labels);
         } catch (Exception e) {
             throw e;
