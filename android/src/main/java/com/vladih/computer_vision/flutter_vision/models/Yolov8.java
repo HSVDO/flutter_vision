@@ -40,7 +40,7 @@ public class Yolov8 extends Yolo {
                 y2 = (model_outputs[0][i][1] + model_outputs[0][i][3] / 2f);
                 float max = 0;
                 int y = 0;
-                for (int j = class_index; j < dimension; j++) {
+                for (int j = class_index; (j < dimension && j < labels.size()); j++) {
                     if (model_outputs[0][i][j] < class_threshold) continue;
                     if (max < model_outputs[0][i][j]) {
                         max = model_outputs[0][i][j];

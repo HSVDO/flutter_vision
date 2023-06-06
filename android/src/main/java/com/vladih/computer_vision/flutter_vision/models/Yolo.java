@@ -17,6 +17,7 @@ import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.lang.reflect.Array;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
@@ -58,6 +59,7 @@ public class Yolo {
         this.use_gpu = use_gpu;
         this.label_path = label_path;
         this.rotation = rotation;
+        appendLog(model_path);
     }
 
     //    public Vector<String> getLabels(){return this.labels;}
@@ -132,7 +134,7 @@ public class Yolo {
         for (int i = 0; i < interpreter.getOutputTensorCount(); i++) {
             shapes.add(format("Output tensor #%s has shape: %s", i, Arrays.toString(interpreter.getOutputTensor(i).shape())));
         }
-        Log.i("printShapes", format("Shapes retrieved: %s.%n", shapes));
+        appendLog(format("Shapes retrieved: %s.%n", shapes));
     }
 
     protected Vector<String> load_labels(AssetManager asset_manager, String label_path) throws Exception {
@@ -158,18 +160,9 @@ public class Yolo {
         }
     }
 
-    public void appendOutput() {
-        appendLog("Output size: " + this.output[0].length + ":" + this.output[0][0].length + ", third dimension:" + this.output[0][0][0]);
-        for (int i = 0; i < this.output[0].length; i++) {
-            appendLog(Arrays.deepToString(this.output[i]));
-            for (int j = 0; j < this.output[i][0].length; j++) {
-                appendLog("###" + Arrays.toString(this.output[i][j]));
-            }
-        }
-    }
-
     public void appendLog(String text) {
-        File logFile = new File(this.context.getExternalFilesDir("txt"), "flutter_vision_log.txt");
+        String fileName = this.model_path.substring(this.model_path.lastIndexOf("/") + 1).replace(".", "");
+        File logFile = new File(this.context.getExternalFilesDir("txt"), "fv_log" + fileName + ".txt");
         if (!logFile.exists()) {
             try {
                 logFile.createNewFile();
@@ -188,30 +181,67 @@ public class Yolo {
         }
     }
 
+    //https://www.tensorflow.org/lite/inference_with_metadata/task_library/image_segmenter
     public List<Map<String, Object>> detect_task(ByteBuffer byteBuffer,
                                                  int source_height,
                                                  int source_width,
                                                  float iou_threshold,
                                                  float conf_threshold, float class_threshold) throws Exception {
+
         try {
-            Log.i("detect_task", "Running interpreter: Creating arrays...");
+            if (hasMultipleOutput()) {
+                Log.i("detect_task", "Running interpreter with multiple outputs...");
+                Map<Integer, Object> outputs = new HashMap<>();
+                for (int i = 0; i < interpreter.getOutputTensorCount(); i++) {
+                    int[] shape = interpreter.getOutputTensor(i).shape();
+                    outputs.put(i, Array.newInstance(float.class, shape));
+                }
+                Object[] inputs = {byteBuffer};
+                this.interpreter.runForMultipleInputsOutputs(inputs, outputs);
+//                appendOutputs(outputs);
+                int[] shape = interpreter.getInputTensor(0).shape();
+                float[][][] boxArray = (float[][][]) outputs.get(0);
+
+                List<float[]> boxes = this.filter_box(boxArray, iou_threshold, conf_threshold, class_threshold, shape[1], shape[2]);
+                boxes = restore_size(boxes, shape[1], shape[2], source_width, source_height);
+
+                int boxCount = 1;
+                for (float[] box : boxes) {
+                    appendLog("Box#" + boxCount++ + ": " + Arrays.toString(box));
+                }
+
+                Log.i("detect_task", format("Boxes: %s", Arrays.deepToString(boxes.toArray())));
+                return out(boxes, this.labels);
+            }
+            Log.i("detect_task", "Running interpreter with single output...");
             int[] shape = this.interpreter.getInputTensor(0).shape();
-            Log.i("detect_task", "Running interpreter...");
             this.interpreter.run(byteBuffer, this.output);
-            Log.i("detect_task", "Ran interpreter...");
-            Log.i("detect_task", format("Output: %s", Arrays.deepToString(this.output)));
-//            appendLog(format("Output: %s", Arrays.deepToString(this.output)));
             List<float[]> boxes = filter_box(this.output, iou_threshold, conf_threshold, class_threshold, shape[1], shape[2]);
             boxes = restore_size(boxes, shape[1], shape[2], source_width, source_height);
+
+
+            int boxCount = 1;
+            for (float[] box : boxes) {
+                appendLog("Box#" + boxCount++ + ": " + Arrays.toString(box));
+            }
+
             Log.i("detect_task", format("Boxes: %s", Arrays.deepToString(boxes.toArray())));
-//            appendLog(format("Boxes: %s", Arrays.deepToString(boxes.toArray())));
-//            appendOutput();
             return out(boxes, this.labels);
         } catch (Exception e) {
             throw e;
         } finally {
             byteBuffer.clear();
         }
+    }
+
+    private void appendOutputs(Map<Integer, Object> outputs) {
+        appendLog("Retrieved " + outputs.size() + " outputs.");
+        appendLog("#0=" + Arrays.deepToString((float[][][]) outputs.get(0)));
+        appendLog("#1=" + Arrays.deepToString((float[][][][]) outputs.get(1)));
+    }
+
+    private boolean hasMultipleOutput() {
+        return this.interpreter.getOutputTensorCount() > 1;
     }
 
     protected List<float[]> filter_box(float[][][] model_outputs, float iou_threshold,
