@@ -152,6 +152,19 @@ result is a `List<Map<String,dynamic>>` where Map have the following keys:
     }
 ```
 
+### For Yolov8 with segmentation model
+result is a `List<Map<String, dynamic>> where Map[0] has the same keys as normal detection Yolo result and Map[1]:
+
+ ``` dart
+    Map<String, dynamic>:{
+     "yourLabel1": List<float[]>
+     "yourLabel2": List<float[]>
+    }
+```
+
+Where each label is mapped to its corresponding segmentation mask. As flutter method channel do not support nested arrays (e.g. float[][]) the output was converted into a List<float[]>. 
+Each list entry is a row with the corresponding mask values. Those values are only the prototype masks and require postprocessing. Refer to ultralytics docs/github issues for further information.
+
 ## For Tesseract
 result is a `List<Map<String,dynamic>>` where Map have the following keys:
 
