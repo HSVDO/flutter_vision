@@ -47,14 +47,32 @@ public class Yolov8 extends Yolo {
                         y = j;
                     }
                 }
+                int mask_index = class_index + labels.size();
+                int mask_index_max_weight = 0;
+                if (dimension > mask_index) {
+                    //calculate index of segmentation mask with max. weight
+                    float max_mask_weight = 0;
+                    for (int j = mask_index; j < dimension; j++) {
+                        float current_value = model_outputs[0][i][j];
+                        if (max_mask_weight < current_value) {
+                            max_mask_weight = current_value;
+                            mask_index_max_weight = j;
+                        }
+                    }
+                }
                 if (max > 0) {
-                    float[] tmp = new float[6];
+                    float[] tmp = new float[7];
                     tmp[0] = x1;
                     tmp[1] = y1;
                     tmp[2] = x2;
                     tmp[3] = y2;
                     tmp[4] = model_outputs[0][i][y];
                     tmp[5] = (y - class_index) * 1f;
+                    if (mask_index_max_weight - mask_index >= 0) {
+                        tmp[6] = (mask_index_max_weight - mask_index) * 1f;
+                    } else {
+                        tmp[6] = -1;
+                    }
                     pre_box.add(tmp);
                 }
             }
@@ -76,11 +94,7 @@ public class Yolov8 extends Yolo {
             for (float[] box : yolo_result) {
                 Map<String, Object> output = new HashMap<>();
                 output.put("box", new float[]{box[0], box[1], box[2], box[3], box[4]}); //x1,y1,x2,y2,conf_class
-                try {
-                    output.put("tag", labels.get((int) box[5]));
-                } catch (ArrayIndexOutOfBoundsException e) {
-                    output.put("tag", "AIOOBE:" + box[5]);
-                }
+                output.put("tag", labels.get((int) box[5]));
                 result.add(output);
             }
             return result;
@@ -88,4 +102,5 @@ public class Yolov8 extends Yolo {
             throw e;
         }
     }
+
 }

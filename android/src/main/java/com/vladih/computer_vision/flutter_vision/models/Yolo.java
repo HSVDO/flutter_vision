@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Vector;
 
+import static com.vladih.computer_vision.flutter_vision.FlutterVisionPlugin.yolo_typing;
 import static java.lang.Math.min;
 import static java.lang.String.format;
 
@@ -161,6 +162,12 @@ public class Yolo {
     }
 
     public void appendLog(String text) {
+        if (1 == 1)
+            return;
+        //TODO remove this method/mark as comment
+        if (!"img".equals(yolo_typing)) {
+            return;
+        }
         String fileName = this.model_path.substring(this.model_path.lastIndexOf("/") + 1).replace(".", "");
         File logFile = new File(this.context.getExternalFilesDir("txt"), "fv_log" + fileName + ".txt");
         if (!logFile.exists()) {
@@ -190,7 +197,6 @@ public class Yolo {
 
         try {
             if (hasMultipleOutput()) {
-                Log.i("detect_task", "Running interpreter with multiple outputs...");
                 Map<Integer, Object> outputs = new HashMap<>();
                 for (int i = 0; i < interpreter.getOutputTensorCount(); i++) {
                     int[] shape = interpreter.getOutputTensor(i).shape();
@@ -198,34 +204,60 @@ public class Yolo {
                 }
                 Object[] inputs = {byteBuffer};
                 this.interpreter.runForMultipleInputsOutputs(inputs, outputs);
-//                appendOutputs(outputs);
                 int[] shape = interpreter.getInputTensor(0).shape();
                 float[][][] boxArray = (float[][][]) outputs.get(0);
 
-                List<float[]> boxes = this.filter_box(boxArray, iou_threshold, conf_threshold, class_threshold, shape[1], shape[2]);
+                List<float[]> boxes = filter_box(boxArray, iou_threshold, conf_threshold, class_threshold, shape[1], shape[2]);
                 boxes = restore_size(boxes, shape[1], shape[2], source_width, source_height);
 
-                int boxCount = 1;
+                float[][][][] masks = (float[][][][]) outputs.get(1);
+                Map<String, Object> relevant_masks = new HashMap<>();
+
                 for (float[] box : boxes) {
-                    appendLog("Box#" + boxCount++ + ": " + Arrays.toString(box));
+                    int mask_index = (int) box[6];
+                    if (mask_index < 0) {
+                        continue;
+                    }
+                    String label = this.labels.get((int) box[5]);
+                    float[][] mask = new float[masks[0][0].length][masks[0][0][0].length];
+                    for (int i = 0; i < masks[0][0].length; i++) {
+                        for (int j = 0; j < masks[0][0][0].length; j++) {
+                            float mask_value = masks[0][i][j][mask_index];
+                            mask[i][j] = mask_value;
+                        }
+                    }
+                    List<float[]> mask_list = new ArrayList<>();
+                    for (int i = 0; i < mask[0].length; i++) {
+                        mask_list.add(mask[i]);
+                    }
+                    if (!mask_list.isEmpty()) {
+                        relevant_masks.put(label, mask_list);
+                    }
                 }
 
-                Log.i("detect_task", format("Boxes: %s", Arrays.deepToString(boxes.toArray())));
-                return out(boxes, this.labels);
+
+//                int boxCount = 1;
+//                for (float[] box : boxes) {
+//                    appendLog("Box#" + boxCount++ + ": " + Arrays.toString(box));
+//                }
+
+                List<Map<String, Object>> out = out(boxes, this.labels);
+                if (!relevant_masks.isEmpty()) {
+                    out.add(relevant_masks);
+                }
+                return out;
             }
-            Log.i("detect_task", "Running interpreter with single output...");
             int[] shape = this.interpreter.getInputTensor(0).shape();
             this.interpreter.run(byteBuffer, this.output);
             List<float[]> boxes = filter_box(this.output, iou_threshold, conf_threshold, class_threshold, shape[1], shape[2]);
             boxes = restore_size(boxes, shape[1], shape[2], source_width, source_height);
 
 
-            int boxCount = 1;
-            for (float[] box : boxes) {
-                appendLog("Box#" + boxCount++ + ": " + Arrays.toString(box));
-            }
+//            int boxCount = 1;
+//            for (float[] box : boxes) {
+//                appendLog("Box#" + boxCount++ + ": " + Arrays.toString(box));
+//            }
 
-            Log.i("detect_task", format("Boxes: %s", Arrays.deepToString(boxes.toArray())));
             return out(boxes, this.labels);
         } catch (Exception e) {
             throw e;
@@ -234,7 +266,7 @@ public class Yolo {
         }
     }
 
-    private void appendOutputs(Map<Integer, Object> outputs) {
+    private void appendOutputsToLog(Map<Integer, Object> outputs) {
         appendLog("Retrieved " + outputs.size() + " outputs.");
         appendLog("#0=" + Arrays.deepToString((float[][][]) outputs.get(0)));
         appendLog("#1=" + Arrays.deepToString((float[][][][]) outputs.get(1)));
