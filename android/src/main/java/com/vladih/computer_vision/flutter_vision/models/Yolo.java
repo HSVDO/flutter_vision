@@ -30,9 +30,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Vector;
 
-import static com.vladih.computer_vision.flutter_vision.FlutterVisionPlugin.yolo_typing;
 import static java.lang.Math.min;
 import static java.lang.String.format;
+
+import static com.vladih.computer_vision.flutter_vision.FlutterVisionPlugin.yolo_typing;
 
 public class Yolo {
     protected float[][][] output;
@@ -236,10 +237,12 @@ public class Yolo {
                 }
 
 
-//                int boxCount = 1;
-//                for (float[] box : boxes) {
-//                    appendLog("Box#" + boxCount++ + ": " + Arrays.toString(box));
-//                }
+                int boxCount = 1;
+                for (float[] box : boxes) {
+                    appendLog("Box#" + boxCount++ + ": " + Arrays.toString(box));
+                }
+
+                appendOutputsToLog(outputs);
 
                 List<Map<String, Object>> out = out(boxes, this.labels);
                 if (!relevant_masks.isEmpty()) {
@@ -253,10 +256,10 @@ public class Yolo {
             boxes = restore_size(boxes, shape[1], shape[2], source_width, source_height);
 
 
-//            int boxCount = 1;
-//            for (float[] box : boxes) {
-//                appendLog("Box#" + boxCount++ + ": " + Arrays.toString(box));
-//            }
+            int boxCount = 1;
+            for (float[] box : boxes) {
+                appendLog("Box#" + boxCount++ + ": " + Arrays.toString(box));
+            }
 
             return out(boxes, this.labels);
         } catch (Exception e) {
