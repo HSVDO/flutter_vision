@@ -163,10 +163,8 @@ public class Yolo {
     }
 
     public void appendLog(String text) {
-        if (1 == 1)
-            return;
         //TODO remove this method/mark as comment
-        if (!"img".equals(yolo_typing)) {
+        if (!"img".equals(yolo_typing) || 1 == 1) {
             return;
         }
         String fileName = this.model_path.substring(this.model_path.lastIndexOf("/") + 1).replace(".", "");
