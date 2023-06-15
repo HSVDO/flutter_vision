@@ -30,10 +30,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Vector;
 
-import static java.lang.Math.min;
-import static java.lang.String.format;
+import androidx.annotation.NonNull;
 
 import static com.vladih.computer_vision.flutter_vision.FlutterVisionPlugin.yolo_typing;
+import static java.lang.Math.min;
+import static java.lang.String.format;
 
 public class Yolo {
     protected float[][][] output;
@@ -209,43 +210,20 @@ public class Yolo {
                 List<float[]> boxes = filter_box(boxArray, iou_threshold, conf_threshold, class_threshold, shape[1], shape[2]);
                 boxes = restore_size(boxes, shape[1], shape[2], source_width, source_height);
 
-                float[][][][] masks = (float[][][][]) outputs.get(1);
-                Map<String, Object> relevant_masks = new HashMap<>();
-
-                for (float[] box : boxes) {
-                    int mask_index = (int) box[6];
-                    if (mask_index < 0) {
-                        continue;
-                    }
-                    String label = this.labels.get((int) box[5]);
-                    float[][] mask = new float[masks[0][0].length][masks[0][0][0].length];
-                    for (int i = 0; i < masks[0][0].length; i++) {
-                        for (int j = 0; j < masks[0][0][0].length; j++) {
-                            float mask_value = masks[0][i][j][mask_index];
-                            mask[i][j] = mask_value;
-                        }
-                    }
-                    List<float[]> mask_list = new ArrayList<>();
-                    for (int i = 0; i < mask[0].length; i++) {
-                        mask_list.add(mask[i]);
-                    }
-                    if (!mask_list.isEmpty()) {
-                        relevant_masks.put(label, mask_list);
-                    }
-                }
-
-
                 int boxCount = 1;
                 for (float[] box : boxes) {
                     appendLog("Box#" + boxCount++ + ": " + Arrays.toString(box));
                 }
 
+                float[][][][] masks = (float[][][][]) outputs.get(1);
+                List<List<float[]>> converted_masks = convert_masks_dart_compatible(masks);
+
                 appendOutputsToLog(outputs);
 
+                List<List<float[]>> post_processed_masks = processMaskOutput(converted_masks, shape[1], shape[2], source_width, source_height);
+
                 List<Map<String, Object>> out = out(boxes, this.labels);
-                if (!relevant_masks.isEmpty()) {
-                    out.add(relevant_masks);
-                }
+                out.add(build_mask_map(converted_masks));
                 return out;
             }
             int[] shape = this.interpreter.getInputTensor(0).shape();
@@ -265,6 +243,57 @@ public class Yolo {
         } finally {
             byteBuffer.clear();
         }
+    }
+
+    private List<List<float[]>> processMaskOutput(List<List<float[]>> converted_masks, int shape_1, int shape_2, int source_width, int source_height) {
+        List<List<float[]>> post_processed_masks = new ArrayList<>();
+        int numMask = converted_masks.size();
+        int maskWidth = shape_1;
+        int maskHeight = shape_2;
+
+        //TODO sigmoid on masks: https://github.com/ibaiGorordo/ONNX-YOLOv8-Instance-Segmentation/blob/main/yoloseg/YOLOSeg.py#L100
+        List<List<float[]>> sigmoid = converted_masks;
+
+        List<List<float[]>> rescaled_masks = new ArrayList<>();
+        for(List<float[]> mask : sigmoid){
+
+        }
+
+        return post_processed_masks;
+    }
+
+    @NonNull
+    private static Map<String, Object> build_mask_map(List<List<float[]>> converted_masks) {
+        Map<String, Object> masks_map = new HashMap<>();
+        if (!converted_masks.isEmpty()) {
+            masks_map.put("masks", converted_masks);
+        }
+        return masks_map;
+    }
+
+    private List<List<float[]>> convert_masks_dart_compatible(float[][][][] masks) {
+        List<List<float[]>> converted_masks = new ArrayList<>();
+        if (masks == null) {
+            return converted_masks;
+        }
+        for (int mask_index = 0; mask_index < masks[0][0][0].length; mask_index++) {
+            float[][] mask = new float[masks[0][0].length][masks[0][0][0].length];
+            for (int i = 0; i < masks[0][0].length; i++) {
+                for (int j = 0; j < masks[0][0][0].length; j++) {
+                    float mask_value = masks[0][i][j][mask_index];
+                    mask[i][j] = mask_value;
+                }
+            }
+            //convert array float[][] to List<float[]>. See dart method channel data type limitations for further information
+            List<float[]> converted_mask = new ArrayList<>();
+            for (int i = 0; i < mask[0].length; i++) {
+                converted_mask.add(mask[i]);
+            }
+            if (!converted_mask.isEmpty()) {
+                converted_masks.add(converted_mask);
+            }
+        }
+        return converted_masks;
     }
 
     private void appendOutputsToLog(Map<Integer, Object> outputs) {
