@@ -208,10 +208,10 @@ public class Yolo {
                 float[][][] boxArray = (float[][][]) outputs.get(0);
 
                 List<float[]> boxes = filter_box(boxArray, iou_threshold, conf_threshold, class_threshold, shape[1], shape[2]);
-                boxes = restore_size(boxes, shape[1], shape[2], source_width, source_height);
+                List<float[]> resized_boxes = restore_size(boxes, shape[1], shape[2], source_width, source_height);
 
                 int boxCount = 1;
-                for (float[] box : boxes) {
+                for (float[] box : resized_boxes) {
                     appendLog("Box#" + boxCount++ + ": " + Arrays.toString(box));
                 }
 
@@ -220,10 +220,12 @@ public class Yolo {
 
                 appendOutputsToLog(outputs);
 
-                List<List<float[]>> post_processed_masks = processMaskOutput(converted_masks, shape[1], shape[2], source_width, source_height);
+                List<List<float[]>> post_processed_masks = processMaskOutput(resized_boxes, converted_masks, shape[1], shape[2], source_width, source_height);
 
-                List<Map<String, Object>> out = out(boxes, this.labels);
-                out.add(build_mask_map(converted_masks));
+                List<Map<String, Object>> out = out(resized_boxes, this.labels);
+                for (int i = 0; i < out.size(); i++) {
+                    out.get(i).put("mask", post_processed_masks.get(i));
+                }
                 return out;
             }
             int[] shape = this.interpreter.getInputTensor(0).shape();
@@ -245,21 +247,122 @@ public class Yolo {
         }
     }
 
-    private List<List<float[]>> processMaskOutput(List<List<float[]>> converted_masks, int shape_1, int shape_2, int source_width, int source_height) {
+    private List<List<float[]>> processMaskOutput(List<float[]> restored_boxes, List<List<float[]>> converted_masks, int maskWidth, int maskHeight, int source_width, int source_height) {
         List<List<float[]>> post_processed_masks = new ArrayList<>();
         int numMask = converted_masks.size();
-        int maskWidth = shape_1;
-        int maskHeight = shape_2;
 
         //TODO sigmoid on masks: https://github.com/ibaiGorordo/ONNX-YOLOv8-Instance-Segmentation/blob/main/yoloseg/YOLOSeg.py#L100
         List<List<float[]>> sigmoid = converted_masks;
 
-        List<List<float[]>> rescaled_masks = new ArrayList<>();
-        for(List<float[]> mask : sigmoid){
+        int ratioWidth = (source_width / maskWidth);
+        int ratioHeight = (source_height / maskHeight);
 
+        int[] blur_size = {ratioWidth, ratioHeight};
+
+        List<float[]> downscaled_boxes = downscale_boxes(restored_boxes, ratioWidth, ratioHeight);
+
+        List<List<float[]>> rescaled_masks = new ArrayList<>();
+
+        //Get mask weights per class
+        List<float[]> box_mask_weights = new ArrayList<>();
+
+        for (float[] box : restored_boxes) {
+            int class_index_in_box = 5; //0 = x1, 1=y1, 2=x2, 3=y2, 4=class, 5-37 = mask weights
+            float[] box_mask = new float[box.length - class_index_in_box];
+            System.arraycopy(box, class_index_in_box + 1, box_mask, 0, box.length - class_index_in_box);
+            box_mask_weights.add(box_mask);
+        }
+
+        //multiply each mask by its corresponding weight
+        List<List<float[]>> masks_per_box = new ArrayList<>();
+        for (float[] box : box_mask_weights) {
+            for (int mask_weight_index = 0; mask_weight_index < sigmoid.size(); mask_weight_index++) {
+                List<float[]> mask = sigmoid.get(mask_weight_index);
+                List<float[]> mask_in_processing = new ArrayList<>();
+                for (int x_index = 0; x_index < mask.size(); x_index++) {
+                    float[] row = new float[mask.get(x_index).length];
+                    for (int y_index = 0; y_index < row.length; y_index++) {
+                        row[y_index] = box[mask_weight_index] * mask.get(x_index)[y_index];
+                    }
+                    mask_in_processing.add(row);
+                }
+                masks_per_box.add(mask_in_processing);
+            }
+        }
+
+        //upscale masks
+        for (List<float[]> mask : masks_per_box) {
+
+            int numRows = mask.size();
+            int numCols = mask.get(0).length;
+
+            float[][] mask_as_array = new float[numRows][numCols];
+
+            for (int i = 0; i < numRows; i++) {
+                float[] row = mask.get(i);
+                System.arraycopy(row, 0, mask_as_array[i], 0, numCols);
+            }
+
+            List<float[]> final_mask = new ArrayList<>(Arrays.asList(bicubicInterpolate(mask_as_array, ratioWidth, ratioHeight)));
+
+            post_processed_masks.add(final_mask);
         }
 
         return post_processed_masks;
+    }
+
+    public float bicubicInterpolation(float[] p, float x) {
+        return p[1] + 0.5f * x * (p[2] - p[0] +
+                x * (2.0f * p[0] - 5.0f * p[1] + 4.0f * p[2] - p[3] +
+                        x * (3.0f * (p[1] - p[2]) + p[3] - p[0])));
+    }
+
+    public float[][] bicubicInterpolate(float[][] data, float scaleX, float scaleY) {
+        int height = data.length;
+        int width = data[0].length;
+
+        int newHeight = (int) (height * scaleY);
+        int newWidth = (int) (width * scaleX);
+
+        float[][] interpolatedData = new float[newHeight][newWidth];
+
+        for (int y = 0; y < newHeight; y++) {
+            float yScaled = y / scaleY;
+
+            for (int x = 0; x < newWidth; x++) {
+                float xScaled = x / scaleX;
+
+                int xFloor = (int) Math.floor(xScaled);
+                int yFloor = (int) Math.floor(yScaled);
+
+                float[] p = new float[4];
+
+                for (int i = -1; i < 3; i++) {
+                    int yPos = Math.min(Math.max(yFloor + i, 0), height - 1);
+                    p[i + 1] = bicubicInterpolation(data[yPos], xScaled - xFloor);
+                }
+
+                interpolatedData[y][x] = bicubicInterpolation(p, yScaled - yFloor);
+            }
+        }
+
+        return interpolatedData;
+    }
+
+
+    private List<float[]> downscale_boxes(List<float[]> restored_boxes, int ratioWidth, int ratioHeight) {
+        List<float[]> result = new ArrayList<>();
+        for (float[] array : restored_boxes) {
+            result.add(new float[]{
+                    array[0] / ratioWidth, //x1
+                    array[1] / ratioHeight, //y1
+                    array[2] / ratioWidth, //x2
+                    array[3] / ratioHeight, //y2
+                    array[4], //conf
+                    array[5] //label
+            });
+        }
+        return result;
     }
 
     @NonNull

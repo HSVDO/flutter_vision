@@ -62,18 +62,19 @@ public class Yolov8 extends Yolo {
                     }
                 }
                 if (max > 0) {
-                    float[] tmp = new float[7];
+                    float[] tmp;
+                    if (dimension > mask_index) {
+                        tmp = new float[7 + (dimension - mask_index)];
+                        System.arraycopy(model_outputs[0][i], 0, tmp, 7, tmp.length);
+                    } else {
+                        tmp = new float[7]; //no masks in output
+                    }
                     tmp[0] = x1;
                     tmp[1] = y1;
                     tmp[2] = x2;
                     tmp[3] = y2;
                     tmp[4] = model_outputs[0][i][y];
                     tmp[5] = (y - class_index) * 1f;
-                    if (mask_index_max_weight - mask_index >= 0) {
-                        tmp[6] = (mask_index_max_weight - mask_index) * 1f;
-                    } else {
-                        tmp[6] = -1;
-                    }
                     pre_box.add(tmp);
                 }
             }
