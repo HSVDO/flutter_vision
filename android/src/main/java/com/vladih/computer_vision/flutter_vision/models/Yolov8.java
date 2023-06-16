@@ -49,25 +49,14 @@ public class Yolov8 extends Yolo {
                     }
                 }
                 int mask_index = class_index + labels.size();
-                int mask_index_max_weight = 0;
-                if (dimension > mask_index) {
-                    //calculate index of segmentation mask with max. weight
-                    float max_mask_weight = 0;
-                    for (int j = mask_index; j < dimension; j++) {
-                        float current_value = model_outputs[0][i][j];
-                        if (max_mask_weight < current_value) {
-                            max_mask_weight = current_value;
-                            mask_index_max_weight = j;
-                        }
-                    }
-                }
                 if (max > 0) {
                     float[] tmp;
                     if (dimension > mask_index) {
-                        tmp = new float[7 + (dimension - mask_index)];
-                        System.arraycopy(model_outputs[0][i], 0, tmp, 7, tmp.length);
+                        int mask_count = dimension - mask_index;
+                        tmp = new float[6 + mask_count];
+                        System.arraycopy(model_outputs[0][i], mask_index, tmp, 6, mask_count);
                     } else {
-                        tmp = new float[7]; //no masks in output
+                        tmp = new float[6]; //no masks in output
                     }
                     tmp[0] = x1;
                     tmp[1] = y1;

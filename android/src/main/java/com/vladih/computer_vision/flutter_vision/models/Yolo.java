@@ -267,9 +267,9 @@ public class Yolo {
         List<float[]> box_mask_weights = new ArrayList<>();
 
         for (float[] box : restored_boxes) {
-            int class_index_in_box = 5; //0 = x1, 1=y1, 2=x2, 3=y2, 4=class, 5-37 = mask weights
-            float[] box_mask = new float[box.length - class_index_in_box];
-            System.arraycopy(box, class_index_in_box + 1, box_mask, 0, box.length - class_index_in_box);
+            int mask_index_in_box = 6; //0 = x1, 1=y1, 2=x2, 3=y2, 4=class conf, 5=class, 5-37 = mask weights
+            float[] box_mask = new float[box.length - mask_index_in_box];
+            System.arraycopy(box, mask_index_in_box, box_mask, 0, box.length - mask_index_in_box);
             box_mask_weights.add(box_mask);
         }
 
