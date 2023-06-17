@@ -255,7 +255,6 @@ public class Yolo {
         //TODO sigmoid on masks: https://github.com/ibaiGorordo/ONNX-YOLOv8-Instance-Segmentation/blob/main/yoloseg/YOLOSeg.py#L100
         List<List<float[]>> sigmoid = converted_masks;
 
-        Log.i("processMaskOutput", format("Calculating scale ratio: sourceW=%s, maskW=%s", source_width, maskWidth));
         float ratioWidth = (((float) source_width) / ((float) maskWidth));
         float ratioHeight = (((float) source_height) / ((float) maskHeight));
 
@@ -319,9 +318,6 @@ public class Yolo {
 
             List<float[]> final_mask = new ArrayList<>(Arrays.asList(bicubicInterpolate(mask_as_array, ratioWidth, ratioHeight)));
 
-            Log.i("upscaling_mask", format("final mask is of size %s", final_mask.size()));
-
-            Log.i("upscaling_mask", format("final mask has format (%s, %s)", final_mask.size(), final_mask.get(0).length));
             post_processed_masks.add(final_mask);
         }
 
@@ -340,9 +336,6 @@ public class Yolo {
 
         int newHeight = (int) (height * scaleY);
         int newWidth = (int) (width * scaleX);
-
-        Log.i("bicubic_interpolate", format("Upscaling by scales %s&%s from %s, %s to %s, %s",
-                scaleX, scaleY, width, height, newWidth, newHeight));
 
         float[][] interpolatedData = new float[newHeight][newWidth];
 
@@ -366,7 +359,6 @@ public class Yolo {
             }
         }
 
-        Log.i("bicubic_interpolate", format("Array to be returned hast size %s, %s", interpolatedData.length, interpolatedData[0].length));
         return interpolatedData;
     }
 
