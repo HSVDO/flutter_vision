@@ -217,7 +217,7 @@ public class Yolo {
                 }
 
                 float[][][][] masks = (float[][][][]) outputs.get(1);
-                List<List<float[]>> converted_masks = convert_masks_dart_compatible(masks);
+                List<float[][]> converted_masks = crop_dimensions(masks);
 
                 appendOutputsToLog(outputs);
 
@@ -249,18 +249,17 @@ public class Yolo {
         }
     }
 
-    private List<List<float[]>> processMaskOutput(List<float[]> restored_boxes, List<List<float[]>> converted_masks, int maskWidth, int maskHeight, int source_width, int source_height) {
+    private List<List<float[]>> processMaskOutput(List<float[]> restored_boxes, List<float[][]> converted_masks, int maskWidth, int maskHeight, int source_width, int source_height) {
         List<List<float[]>> post_processed_masks = new ArrayList<>();
+        int dimension_x = converted_masks.get(0).length;
+        int dimension_y = converted_masks.get(0)[0].length;
 
         //TODO sigmoid on masks: https://github.com/ibaiGorordo/ONNX-YOLOv8-Instance-Segmentation/blob/main/yoloseg/YOLOSeg.py#L100
-        List<List<float[]>> sigmoid = converted_masks;
 
         float ratioWidth = (((float) source_width) / ((float) maskWidth));
         float ratioHeight = (((float) source_height) / ((float) maskHeight));
 
         List<float[]> downscaled_boxes = downscale_boxes(restored_boxes, ratioWidth, ratioHeight);
-
-        List<List<float[]>> rescaled_masks = new ArrayList<>();
 
         //Get mask weights per class
         List<float[]> box_mask_weights = new ArrayList<>();
@@ -273,55 +272,128 @@ public class Yolo {
         } //returns List<array with 32 weights>
 
         //multiply each mask by its corresponding weight
-        List<List<float[]>> mask_per_box = new ArrayList<>();
-        for (float[] box : box_mask_weights) {
-            List<float[]> mask_for_this_box = new ArrayList<>();
-            for (int mask_weight_index = 0; mask_weight_index < sigmoid.size(); mask_weight_index++) {
-                List<float[]> mask = sigmoid.get(mask_weight_index);
-                List<float[]> mask_in_processing = new ArrayList<>();
-                for (int x_index = 0; x_index < mask.size(); x_index++) {
-                    float[] column = new float[mask.get(x_index).length];
-                    for (int y_index = 0; y_index < column.length; y_index++) {
-                        column[y_index] = box[mask_weight_index] * mask.get(x_index)[y_index];
-                    }
-                    mask_in_processing.add(column);
-                }
-                //here is the mask multiplied and ready to be summed up
-                if (mask_for_this_box.isEmpty()) {
-                    mask_for_this_box = mask_in_processing;
-                } else {
-                    for (int i = 0; i < mask_for_this_box.size(); i++) {
-                        float[] column = mask_for_this_box.get(i);
-                        for (int j = 0; j < column.length; j++) {
-                            float[] column_to_add = mask_in_processing.get(i);
-                            column[j] += column_to_add[j];
-                        }
-                    }
-                }
-            }
-            mask_per_box.add(mask_for_this_box);
-        }
+        List<float[][]> mask_per_box = mask_per_box_old(converted_masks, box_mask_weights);
 
         //upscale masks
-        for (List<float[]> mask : mask_per_box) {
+        for (float[][] mask : mask_per_box) {
+            Log.i("Interpolating", format("Before: %s", Arrays.deepToString(mask)));
+            float[][] interpolated = bicubicInterpolate(mask, ratioWidth, ratioHeight);
+//            round_to_zero_or_one(interpolated);
+            Log.i("Interpolating", format("After: %s", Arrays.deepToString(interpolated)));
 
-            int numRows = mask.size();
-            int numCols = mask.get(0).length;
-
-            float[][] mask_as_array = new float[numRows][numCols];
-
-            for (int i = 0; i < numRows; i++) {
-                float[] row = mask.get(i);
-                System.arraycopy(row, 0, mask_as_array[i], 0, numCols);
-            }
-
-
-            List<float[]> final_mask = new ArrayList<>(Arrays.asList(bicubicInterpolate(mask_as_array, ratioWidth, ratioHeight)));
+            List<float[]> final_mask = convert_2d_array_dart_compatible(interpolated);
 
             post_processed_masks.add(final_mask);
         }
 
         return post_processed_masks;
+    }
+
+    private static void round_to_zero_or_one(float[][] interpolated) {
+        for (int x = 0; x < interpolated.length; x++) {
+            for (int y = 0; y < interpolated[0].length; y++) {
+                interpolated[x][y] = (interpolated[x][y] > 0.5) ? 1 : 0;
+            }
+        }
+    }
+
+    public List<float[][]> mask_per_box_new(List<float[][]> mask_outputs, List<float[]> box_mask_weights) {
+        List<float[][]> mask_per_box = new ArrayList<>();
+        for (float[] mask_predictions : box_mask_weights) {
+            for (float[][] mask_output : mask_outputs) {
+                int num_mask = mask_predictions.length;
+                int reshapeColumns = mask_output.length * mask_output[0].length;
+                float[][] reshapedMaskOutput = new float[num_mask][reshapeColumns];
+                float[][] masks = new float[num_mask][mask_output.length * mask_output[0].length];
+                for (int i = 0; i < num_mask; i++) {
+                    for (int j = 0; j < mask_output.length; j++) {
+                        System.arraycopy(mask_output[j], 0, reshapedMaskOutput[i], j * mask_output[0].length, mask_output[0].length);
+                    }
+                }
+                for (int i = 0; i < num_mask; i++) {
+                    for (int j = 0; j < reshapedMaskOutput[0].length; j++) {
+                        float dotProduct = 0.0f;
+                        for (int k = 0; k < mask_predictions.length; k++) {
+                            dotProduct += mask_predictions[k] * reshapedMaskOutput[i][k];
+                        }
+                        masks[i][j] = sigmoid(dotProduct);
+                    }
+                }
+                mask_per_box.add(masks);
+            }
+        }
+
+        return mask_per_box;
+    }
+
+    public List<float[][]> mask_per_box_old(List<float[][]> sigmoid, List<float[]> box_mask_weights) {
+        List<float[][]> mask_per_box = new ArrayList<>();
+        for (float[] box : box_mask_weights) {
+            float[][] summed_mask_for_this_box = null;
+            for (int mask_weight_index = 0; mask_weight_index < sigmoid.size(); mask_weight_index++) {
+                float[][] mask = sigmoid.get(mask_weight_index).clone();
+                mask = transpose(mask);
+//                mask = sigmoid(mask);
+                for (int x_index = 0; x_index < sigmoid.size(); x_index++) {
+                    for (int y_index = 0; y_index < sigmoid.get(0).length; y_index++) {
+                        mask[x_index][y_index] = box[mask_weight_index] * mask[x_index][y_index];
+                    }
+                }
+//                mask = sigmoid(mask);
+                mask = transpose(mask);
+                //here is the mask multiplied and ready to be summed up
+                if (summed_mask_for_this_box == null) {
+                    summed_mask_for_this_box = mask.clone();
+                } else {
+                    for (int x_index = 0; x_index < sigmoid.size(); x_index++) {
+                        for (int y_index = 0; y_index < sigmoid.get(0).length; y_index++) {
+                            summed_mask_for_this_box[x_index][y_index] += mask[x_index][y_index];
+                        }
+                    }
+                }
+            }
+            mask_per_box.add(summed_mask_for_this_box);
+            break;
+        }
+        return mask_per_box;
+    }
+
+    /**
+     * Transposes a matrix.
+     * Assumption: mat is a non-empty matrix. i.e.:
+     * 1. mat != null
+     * 2. mat.length > 0
+     * 3. For every i, mat[i].length are equal and mat[i].length > 0
+     */
+    public float[][] transpose(float[][] mat) {
+        float[][] result = new float[mat[0].length][mat.length];
+        for (int i = 0; i < mat.length; ++i) {
+            for (int j = 0; j < mat[0].length; ++j) {
+                result[j][i] = mat[i][j];
+            }
+        }
+        return result;
+    }
+
+    private List<float[][]> sigmoid(List<float[][]> converted_masks) {
+        List<float[][]> masks = new ArrayList<>();
+        for (float[][] mask : converted_masks) {
+            masks.add(sigmoid(mask));
+        }
+        return masks;
+    }
+
+    public float[][] sigmoid(float[][] array) {
+        for (int i = 0; i < array.length; i++) {
+            for (int j = 0; j < array[i].length; j++) {
+                array[i][j] = sigmoid(array[i][j]);
+            }
+        }
+        return array;
+    }
+
+    public float sigmoid(float x) {
+        return (float) (1.0 / (1.0 + Math.exp(-x)));
     }
 
     public float bicubicInterpolation(float[] p, float x) {
@@ -387,8 +459,8 @@ public class Yolo {
         return masks_map;
     }
 
-    private List<List<float[]>> convert_masks_dart_compatible(float[][][][] masks) {
-        List<List<float[]>> converted_masks = new ArrayList<>();
+    private List<float[][]> crop_dimensions(float[][][][] masks) {
+        List<float[][]> converted_masks = new ArrayList<>();
         if (masks == null) {
             return converted_masks;
         }
@@ -400,13 +472,14 @@ public class Yolo {
                     mask[i][j] = mask_value;
                 }
             }
-            //convert array float[][] to List<float[]>. See dart method channel data type limitations for further information
-            List<float[]> converted_mask = new ArrayList<>(Arrays.asList(mask));
-            if (!converted_mask.isEmpty()) {
-                converted_masks.add(converted_mask);
-            }
+            converted_masks.add(mask);
         }
         return converted_masks;
+    }
+
+    public List<float[]> convert_2d_array_dart_compatible(float[][] array) {
+        //convert array float[][] to List<float[]>. See dart method channel data type limitations for further information
+        return new ArrayList<>(Arrays.asList(array));
     }
 
     private void appendOutputsToLog(Map<Integer, Object> outputs) {
