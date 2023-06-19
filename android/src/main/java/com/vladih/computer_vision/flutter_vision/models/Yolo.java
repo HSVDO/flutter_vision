@@ -42,14 +42,11 @@ public class Yolo {
     protected Vector<String> labels;
     protected final Context context;
     protected final String model_path;
-    protected static String old_model_path;
     protected final boolean is_assets;
     protected final int num_threads;
     protected final boolean use_gpu;
     protected final String label_path;
     protected final int rotation;
-
-    private boolean isClosed;
 
     public Yolo(Context context,
                 String model_path,
@@ -79,11 +76,7 @@ public class Yolo {
         FileChannel file_channel = null;
         FileInputStream input_stream = null;
         try {
-            if (this.interpreter == null || !this.model_path.equals(old_model_path)) {
-                old_model_path = this.model_path;
-                if(interpreter != null){
-                    close();
-                }
+            if (this.interpreter == null) {
                 if (is_assets) {
                     asset_manager = context.getAssets();
                     AssetFileDescriptor file_descriptor = asset_manager.openFd(
@@ -120,7 +113,6 @@ public class Yolo {
                 int[] shape = interpreter.getOutputTensor(0).shape();
                 printShapes();
                 this.output = new float[shape[0]][shape[1]][shape[2]];
-                isClosed = false;
                 Log.i("initialize_model", "Marked model as NOT closed.");
             }
         } catch (Exception e) {
@@ -663,7 +655,6 @@ public class Yolo {
 
     public void close() {
         try {
-            isClosed = true;
             if (interpreter != null)
                 interpreter.close();
         } catch (Exception e) {
@@ -671,7 +662,4 @@ public class Yolo {
         }
     }
 
-    public boolean isClosed() {
-        return isClosed;
-    }
 }
