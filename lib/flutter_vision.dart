@@ -87,12 +87,14 @@ abstract class FlutterVision {
   /// ,[modelVersion] - yolov5, yolov8
   /// ,[numThreads] - number of threads to use for inference
   /// ,[useGPU] - use GPU for inference
-  Future<void> loadYoloModel(
-      {required String modelPath,
-      required String labels,
-      required String modelVersion,
-      int? numThreads,
-      bool? useGpu});
+  Future<void> loadYoloModel({
+    required String modelPath,
+    required String labels,
+    required String modelVersion,
+    int? numThreads,
+    bool? useGpu,
+    bool? useNnapi,
+  });
 
   ///yoloOnFrame accept a byte List as input and
   ///return a List<Map<String, dynamic>>.

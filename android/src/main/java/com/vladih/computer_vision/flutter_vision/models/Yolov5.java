@@ -26,8 +26,9 @@ public class Yolov5 extends Yolo{
                   boolean is_assets,
                   int num_threads,
                   boolean use_gpu,
+                  boolean use_nnapi,
                   String label_path,
                   int rotation) {
-        super(context, model_path, is_assets, num_threads, use_gpu, label_path, rotation);
+        super(context, model_path, is_assets, num_threads, use_gpu, use_nnapi, label_path, rotation);
     }
 }

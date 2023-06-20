@@ -3,12 +3,14 @@ package com.vladih.computer_vision.flutter_vision.models;
 import android.content.Context;
 import android.content.res.AssetFileDescriptor;
 import android.content.res.AssetManager;
+import android.os.Build;
 import android.util.Log;
 
 import org.tensorflow.lite.Interpreter;
 import org.tensorflow.lite.Tensor;
 import org.tensorflow.lite.gpu.CompatibilityList;
 import org.tensorflow.lite.gpu.GpuDelegate;
+import org.tensorflow.lite.nnapi.NnApiDelegate;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -45,14 +47,20 @@ public class Yolo {
     protected final boolean is_assets;
     protected final int num_threads;
     protected final boolean use_gpu;
+    protected final boolean use_nnapi;
     protected final String label_path;
     protected final int rotation;
+
+    private GpuDelegate gpuDelegate;
+
+    private NnApiDelegate nnApiDelegate;
 
     public Yolo(Context context,
                 String model_path,
                 boolean is_assets,
                 int num_threads,
                 boolean use_gpu,
+                boolean use_nnapi,
                 String label_path,
                 int rotation) {
         this.context = context;
@@ -60,6 +68,7 @@ public class Yolo {
         this.is_assets = is_assets;
         this.num_threads = num_threads;
         this.use_gpu = use_gpu;
+        this.use_nnapi = use_nnapi;
         this.label_path = label_path;
         this.rotation = rotation;
         appendLog(model_path);
@@ -102,10 +111,22 @@ public class Yolo {
                 if (use_gpu) {
                     if (compatibilityList.isDelegateSupportedOnThisDevice()) {
                         GpuDelegate.Options gpuOptions = compatibilityList.getBestOptionsForThisDevice();
-                        interpreterOptions.addDelegate(
-                                new GpuDelegate(gpuOptions.setQuantizedModelsAllowed(true)));
+                        gpuDelegate = new GpuDelegate(gpuOptions.setQuantizedModelsAllowed(true));
+                        interpreterOptions.addDelegate(gpuDelegate);
+
+                    }
+                } else if (use_nnapi) {
+                    if (compatibilityList.isDelegateSupportedOnThisDevice()) {
+                        // Initialize interpreter with NNAPI delegate for Android Pie or above
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                            NnApiDelegate.Options nnapiOptions =
+                                    new NnApiDelegate.Options();
+                            nnApiDelegate = new NnApiDelegate(nnapiOptions);
+                            interpreterOptions.addDelegate(nnApiDelegate);
+                        }
                     }
                 }
+                interpreterOptions.setUseNNAPI(true);
                 //batch, width, height, channels
                 this.interpreter = new Interpreter(buffer, interpreterOptions);
                 this.interpreter.allocateTensors();
@@ -216,18 +237,18 @@ public class Yolo {
                     appendLog("Box#" + boxCount++ + ": " + Arrays.toString(box));
                 }
 
-                float[][][][] masks = (float[][][][]) outputs.get(1);
-                List<float[][]> converted_masks = crop_dimensions(masks);
+//                float[][][][] masks = (float[][][][]) outputs.get(1);
+//                List<float[][]> converted_masks = crop_dimensions(masks);
 
-                appendOutputsToLog(outputs);
+//                appendOutputsToLog(outputs);
 
-                shape = interpreter.getOutputTensor(1).shape();
-                List<List<float[]>> post_processed_masks = processMaskOutput(resized_boxes, converted_masks, shape[1], shape[2], source_width, source_height);
+//                shape = interpreter.getOutputTensor(1).shape();
+//                List<List<float[]>> post_processed_masks = processMaskOutput(resized_boxes, converted_masks, shape[1], shape[2], source_width, source_height);
 
                 List<Map<String, Object>> out = out(resized_boxes, this.labels);
-                for (int i = 0; i < out.size(); i++) {
-                    out.get(i).put("mask", post_processed_masks.get(i));
-                }
+//                for (int i = 0; i < out.size(); i++) {
+//                    out.get(i).put("mask", post_processed_masks.get(i));
+//                }
                 return out;
             }
             int[] shape = this.interpreter.getInputTensor(0).shape();
@@ -261,7 +282,7 @@ public class Yolo {
 
         List<float[]> downscaled_boxes = downscale_boxes(restored_boxes, ratioWidth, ratioHeight);
 
-        //Get mask weights per class
+        //Get mask weights per box
         List<float[]> box_mask_weights = new ArrayList<>();
 
         for (float[] box : restored_boxes) {
@@ -276,15 +297,16 @@ public class Yolo {
 
         //upscale masks
         for (float[][] mask : mask_per_box) {
-            Log.i("Interpolating", format("Before: %s", Arrays.deepToString(mask)));
+//            Log.i("Interpolating", format("Before: %s", Arrays.deepToString(mask)));
             float[][] interpolated = bicubicInterpolate(mask, ratioWidth, ratioHeight);
 //            round_to_zero_or_one(interpolated);
-            Log.i("Interpolating", format("After: %s", Arrays.deepToString(interpolated)));
+//            Log.i("Interpolating", format("After: %s", Arrays.deepToString(interpolated)));
 
             List<float[]> final_mask = convert_2d_array_dart_compatible(interpolated);
 
             post_processed_masks.add(final_mask);
         }
+
 
         return post_processed_masks;
     }
@@ -353,7 +375,6 @@ public class Yolo {
                 }
             }
             mask_per_box.add(summed_mask_for_this_box);
-            break;
         }
         return mask_per_box;
     }
@@ -655,8 +676,15 @@ public class Yolo {
 
     public void close() {
         try {
-            if (interpreter != null)
+            if (interpreter != null) {
                 interpreter.close();
+            }
+            if (gpuDelegate != null) {
+                gpuDelegate.close();
+            }
+            if (nnApiDelegate != null) {
+                nnApiDelegate.close();
+            }
         } catch (Exception e) {
             throw e;
         }

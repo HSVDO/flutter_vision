@@ -172,6 +172,7 @@ public class FlutterVisionPlugin implements FlutterPlugin, MethodCallHandler {
         final boolean is_asset = is_asset_obj == null ? false : (boolean) is_asset_obj;
         final int num_threads = (int) args.get("num_threads");
         final boolean use_gpu = (boolean) args.get("use_gpu");
+        final boolean use_nnapi = (boolean) args.get("use_nnapi");
         final String label_path = this.assets.getAssetFilePathByName(args.get("label_path").toString());
         final int rotation = (int) args.get("rotation");
         final String version = args.get("model_version").toString();
@@ -184,6 +185,7 @@ public class FlutterVisionPlugin implements FlutterPlugin, MethodCallHandler {
                         is_asset,
                         num_threads,
                         use_gpu,
+                        use_nnapi,
                         label_path,
                         rotation);
                 yolo.initialize_model();
@@ -196,6 +198,7 @@ public class FlutterVisionPlugin implements FlutterPlugin, MethodCallHandler {
                         is_asset,
                         num_threads,
                         use_gpu,
+                        use_nnapi,
                         label_path,
                         rotation);
                 yolo.initialize_model();
