@@ -267,14 +267,17 @@ public class Yolo {
     }
 
     public float[][][] processMask_ultralytics(float[][][] protos, float[][] bboxes, int source_width, int source_height, boolean upsample) {
+        int num_boxes = bboxes.length;
+        if(num_boxes == 0){
+            return new float[0][source_width][source_height];
+        }
         float[][] mask_weights = new float[bboxes.length][];
         int mask_weights_index = 6;
-        for (int i = 0; i < bboxes.length; i++) {
+        for (int i = 0; i < num_boxes; i++) {
             mask_weights[i] = new float[bboxes[i].length - mask_weights_index];
             System.arraycopy(bboxes[i], mask_weights_index, mask_weights[i], 0, mask_weights[i].length);
         }
 
-        int num_boxes = bboxes.length;
         int mask_width = protos.length;
         int mask_height = protos[0].length;
         int num_masks = protos[0][0].length;
