@@ -273,29 +273,30 @@ public class Yolo {
             mask_weights[i] = new float[bboxes[i].length - mask_weights_index];
             System.arraycopy(bboxes[i], mask_weights_index, mask_weights[i], 0, mask_weights[i].length);
         }
+
         int num_boxes = bboxes.length;
         int mask_width = protos.length;
         int mask_height = protos[0].length;
         int num_masks = protos[0][0].length;
 
-        Log.i("masks_ultra", format("num_boxes= %s, num_masks= %s, mask_height= %s, mask_width= %s", num_boxes, num_masks, mask_height, mask_width));
-
-        float[][][] masks = new float[num_boxes][source_height][source_width];
+        float[][][] masks = new float[num_boxes][source_width][source_height];
 
         for (int box_index = 0; box_index < num_boxes; box_index++) {
-            Log.i("masks_ultra", format("processing box weight: %s", Arrays.toString(mask_weights[box_index])));
-            for (int width_index = 0; width_index < mask_width; width_index++) {
             for (int height_index = 0; height_index < mask_height; height_index++) {
-
+                for (int width_index = 0; width_index < mask_width; width_index++) {
                     float sum = 0.0f;
                     for (int mask_index = 0; mask_index < num_masks; mask_index++) {
-                        sum += mask_weights[box_index][mask_index] * protos[width_index][height_index][mask_index];
+                        sum += mask_weights[box_index][mask_index] * protos[height_index][width_index][mask_index];
                     }
-                    masks[box_index][width_index][height_index] = sigmoid(sum);
+                    masks[box_index][height_index][width_index] = sigmoid(sum);
                 }
             }
         }
-        Log.i("masks_ultra", format("Bbox before downsample: %s", Arrays.deepToString(bboxes)));
+
+        //transpose width and height
+        for (int box_index = 0; box_index < num_boxes; box_index++) {
+            masks[box_index] = transpose(masks[box_index]);
+        }
 
         float[][] downsampled_bboxes = clone(bboxes);
         for (float[] bbox : downsampled_bboxes) {
@@ -304,38 +305,23 @@ public class Yolo {
             bbox[2] *= (double) mask_width / source_width;
             bbox[3] *= (double) mask_height / source_height;
         }
-        Log.i("masks_ultra", format("Bbox after downsample: %s", Arrays.deepToString(bboxes)));
-        Log.i("masks_ultra", format("downsampled bboxes after downsample: %s", Arrays.deepToString(downsampled_bboxes)));
 
-        masks = crop_mask(masks, downsampled_bboxes);
+        crop_mask(masks, downsampled_bboxes);
 
-        Log.i("masks_ultra", format("Before interpolate: %s", Arrays.deepToString(masks)));
-        Log.i("masks_ultra", format("Bbox before interpolate: %s", Arrays.deepToString(bboxes)));
         if (upsample) {
             masks = upsampleMask_ultralytics(masks, source_height, source_width, mask_height, mask_width);
 //            masks = bicubicInterpolate(masks, source_width, source_height);
         }
-        Log.i("masks_ultra", format("After interpolate: %s", Arrays.deepToString(masks)));
-        Log.i("masks_ultra", format("Bbox after interpolate: %s", Arrays.deepToString(bboxes)));
 
-        int pixel = 0;
-        int relevantPixel = 0;
         for (int box_index = 0; box_index < num_boxes; box_index++) {
             int array_height = masks[box_index].length;
             int array_width = masks[box_index][0].length;
-            Log.i("masks_ultra", format("Going to normalize: %s", Arrays.deepToString(masks[box_index])));
-            for (int height_index = 0; height_index < array_height; height_index++) {
-                for (int width_index = 0; width_index < array_width; width_index++) {
-                    pixel++;
-                    masks[box_index][height_index][width_index] = masks[box_index][height_index][width_index] > 0.5 ? 1 : 0;
-                    if (masks[box_index][height_index][width_index] == 1) {
-                        relevantPixel++;
-                    }
+            for (int width_index = 0; width_index < array_width; width_index++) {
+                for (int height_index = 0; height_index < array_height; height_index++) {
+                    masks[box_index][width_index][height_index] = masks[box_index][width_index][height_index] > 0.5 ? 1 : 0;
                 }
             }
         }
-        Log.i("masks_ultra", format("Normalized: %s", Arrays.deepToString(masks)));
-        Log.i("masks_ultra", format("Pixel relevant: %s of total %s", relevantPixel, pixel));
         return masks;
     }
 
@@ -347,7 +333,7 @@ public class Yolo {
         return clone;
     }
 
-    private float[][][] crop_mask(float[][][] masks, float[][] bboxes) {
+    private void crop_mask(float[][][] masks, float[][] bboxes) {
         int num_boxes = bboxes.length;
         int mask_width = masks.length;
         int mask_height = masks[0].length;
@@ -355,18 +341,27 @@ public class Yolo {
             for (int height_index = 0; height_index < mask_height; height_index++) {
                 for (int width_index = 0; width_index < mask_width; width_index++) {
                     if (bboxes[box_index][0] < width_index) {
-                        masks[box_index][height_index][width_index] = 0;
+                        masks[box_index][width_index][height_index] = 0;
                     } else if (bboxes[box_index][1] < height_index) {
-                        masks[box_index][height_index][width_index] = 0;
+                        masks[box_index][width_index][height_index] = 0;
                     } else if (bboxes[box_index][2] > width_index) {
-                        masks[box_index][height_index][width_index] = 0;
-                    } else if (bboxes[box_index][3] > width_index) {
-                        masks[box_index][height_index][width_index] = 0;
+                        masks[box_index][width_index][height_index] = 0;
+                    } else if (bboxes[box_index][3] > height_index) {
+                        masks[box_index][width_index][height_index] = 0;
                     }
                 }
             }
         }
-        return masks;
+    }
+
+    public float[][] transpose(float[][] mat) {
+        float[][] result = new float[mat[0].length][mat.length];
+        for (int i = 0; i < mat.length; ++i) {
+            for (int j = 0; j < mat[0].length; ++j) {
+                result[j][i] = mat[i][j];
+            }
+        }
+        return result;
     }
 
     private float[][][] bicubicInterpolate(float[][][] mask, int source_width, int source_height) {
