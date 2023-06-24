@@ -268,7 +268,7 @@ public class Yolo {
 
     public float[][][] processMask_ultralytics(float[][][] protos, float[][] bboxes, int source_width, int source_height, boolean upsample) {
         int num_boxes = bboxes.length;
-        if(num_boxes == 0){
+        if (num_boxes == 0) {
             return new float[0][source_width][source_height];
         }
         float[][] mask_weights = new float[bboxes.length][];
@@ -317,8 +317,8 @@ public class Yolo {
         }
 
         for (int box_index = 0; box_index < num_boxes; box_index++) {
-            int array_height = masks[box_index].length;
-            int array_width = masks[box_index][0].length;
+            int array_width = masks[box_index].length;
+            int array_height = masks[box_index][0].length;
             for (int width_index = 0; width_index < array_width; width_index++) {
                 for (int height_index = 0; height_index < array_height; height_index++) {
                     masks[box_index][width_index][height_index] = masks[box_index][width_index][height_index] > 0.5 ? 1 : 0;
@@ -338,8 +338,9 @@ public class Yolo {
 
     private void crop_mask(float[][][] masks, float[][] bboxes) {
         int num_boxes = bboxes.length;
-        int mask_width = masks.length;
-        int mask_height = masks[0].length;
+        int mask_width = masks[0].length;
+        int mask_height = masks[0][0].length;
+        Log.i("crop_mask", format("Num boxes: %s, mask_width: %s, mask_height: %s", num_boxes, mask_width, mask_height));
         for (int box_index = 0; box_index < num_boxes; box_index++) {
             for (int height_index = 0; height_index < mask_height; height_index++) {
                 for (int width_index = 0; width_index < mask_width; width_index++) {
