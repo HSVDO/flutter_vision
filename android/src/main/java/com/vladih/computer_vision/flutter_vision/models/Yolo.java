@@ -267,6 +267,7 @@ public class Yolo {
     }
 
     public float[][][] processMask_ultralytics(float[][][] protos, float[][] bboxes, int source_width, int source_height, boolean upsample) {
+        //Log.i("process_masks", format("source_width: %s, source_height: %s", source_width, source_height));
         int num_boxes = bboxes.length;
         if (num_boxes == 0) {
             return new float[0][source_width][source_height];
@@ -297,9 +298,9 @@ public class Yolo {
         }
 
         //transpose width and height
-        for (int box_index = 0; box_index < num_boxes; box_index++) {
-            masks[box_index] = transpose(masks[box_index]);
-        }
+//        for (int box_index = 0; box_index < num_boxes; box_index++) {
+//            masks[box_index] = transpose(masks[box_index]);
+//        }
 
         float[][] downsampled_bboxes = clone(bboxes);
         for (float[] bbox : downsampled_bboxes) {
@@ -309,7 +310,7 @@ public class Yolo {
             bbox[3] *= (double) mask_height / source_height;
         }
 
-        crop_mask(masks, downsampled_bboxes);
+//        crop_mask(masks, downsampled_bboxes);
 
         if (upsample) {
             masks = upsampleMask_ultralytics(masks, source_height, source_width, mask_height, mask_width);
@@ -340,17 +341,17 @@ public class Yolo {
         int num_boxes = bboxes.length;
         int mask_width = masks[0].length;
         int mask_height = masks[0][0].length;
-        Log.i("crop_mask", format("Num boxes: %s, mask_width: %s, mask_height: %s", num_boxes, mask_width, mask_height));
+        //Log.i("crop_mask", format("Num boxes: %s, mask_width: %s, mask_height: %s", num_boxes, mask_width, mask_height));
         for (int box_index = 0; box_index < num_boxes; box_index++) {
-            for (int height_index = 0; height_index < mask_height; height_index++) {
-                for (int width_index = 0; width_index < mask_width; width_index++) {
-                    if (bboxes[box_index][0] < width_index) {
+            for (int width_index = 0; width_index < mask_width; width_index++) {
+                for (int height_index = 0; height_index < mask_height; height_index++) {
+                    if (width_index < bboxes[box_index][0]) {
                         masks[box_index][width_index][height_index] = 0;
-                    } else if (bboxes[box_index][1] < height_index) {
+                    } else if (height_index < bboxes[box_index][1]) {
                         masks[box_index][width_index][height_index] = 0;
-                    } else if (bboxes[box_index][2] > width_index) {
+                    } else if (width_index > bboxes[box_index][2]) {
                         masks[box_index][width_index][height_index] = 0;
-                    } else if (bboxes[box_index][3] > height_index) {
+                    } else if (height_index > bboxes[box_index][3]) {
                         masks[box_index][width_index][height_index] = 0;
                     }
                 }
@@ -359,6 +360,7 @@ public class Yolo {
     }
 
     public float[][] transpose(float[][] mat) {
+        //Log.i("Transpose", format("Transposing: x: %s, y: %s", mat.length, mat[0].length));
         float[][] result = new float[mat[0].length][mat.length];
         for (int i = 0; i < mat.length; ++i) {
             for (int j = 0; j < mat[0].length; ++j) {
