@@ -244,6 +244,7 @@ public class Yolo {
                 List<Map<String, Object>> out = out(resized_boxes, this.labels);
                 for (int i = 0; i < out.size(); i++) {
                     out.get(i).put("mask", convert_2d_array_dart_compatible(processed_masks[i]));
+                    out.get(i).put("outline", convert_2d_array_dart_compatible(convertToOutline(clone(processed_masks[i]), (float[]) out.get(i).get("box"))));
                 }
                 return out;
             }
@@ -264,6 +265,60 @@ public class Yolo {
         } finally {
             byteBuffer.clear();
         }
+    }
+
+    private float[][] convertToOutline(float[][] segmentationMask, float[] box) {
+        int height = segmentationMask.length;
+        int width = segmentationMask[0].length;
+        float[][] outlineMask = new float[height][width];
+
+        // Iterate over each pixel in the segmentation mask
+        for (int x = (int) box[0]; x < (int) box[2]; x = x +1 ) {
+            for (int y = (int) box[1]; y < (int) box[3]; y = y +1 ) {
+                // Check if the current pixel is part of the object
+                if (segmentationMask[y][x] != 0) {
+                    // Check if any neighboring pixel is not part of the object
+                    if (isOutline(segmentationMask, x, y)) {
+                        // Set the pixel in the outline mask to indicate the outline
+                        outlineMask[y][x] = 0;
+                    } else {
+                        // Set the pixel in the outline mask to indicate the outline
+                        outlineMask[y][x] = 1;
+                    }
+                }
+            }
+        }
+
+        return outlineMask;
+    }
+
+    private boolean isOutline(float[][] segmentationMask, int x, int y) {
+        int height = segmentationMask.length;
+        int width = segmentationMask[0].length;
+
+        // Define the 8 possible neighboring pixels
+        int[][] neighbors = {
+                {-1, -1}, {0, -1}, {1, -1},
+                {-1, 0}, {1, 0},
+                {-1, 1}, {0, 1}, {1, 1}
+        };
+
+        int numOfNeighbors = 0;
+
+        // Check if any neighboring pixel is part of the object
+        for (int[] neighbor : neighbors) {
+            int nx = x + neighbor[0];
+            int ny = y + neighbor[1];
+
+            // Check if the neighboring pixel is within the image bounds
+            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                if (segmentationMask[ny][nx] != 0) {
+                    numOfNeighbors++;
+                }
+            }
+        }
+
+        return numOfNeighbors >= 8;
     }
 
     public float[][][] processMask_ultralytics(float[][][] protos, float[][] bboxes, int source_width, int source_height, boolean upsample) {
