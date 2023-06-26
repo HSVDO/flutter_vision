@@ -153,12 +153,13 @@ result is a `List<Map<String,dynamic>>` where Map have the following keys:
 ```
 
 ### For Yolov8 with segmentation model
-result is a `List<Map<String, dynamic>>` where `Map[0]` has the same keys as normal detection Yolo result and `Map[1]` is represented as following:
+result is a `List<Map<String, dynamic>>` where the map has the same keys as Yolo detection result, just extended by key `mask`. The mask is a two dimensional list of doubles (outer list = rows (x-coordinate), inner list = columns (y-coordinate)):
 
  ``` dart
     Map<String, dynamic>:{
-     "yourLabel1": List<float[]>
-     "yourLabel2": List<float[]>
+     "box": [x1:top, y1:left, x2:bottom, y2:right, class_confidence]
+     "tag": String: detected class
+     "mask": List<List<double>> (as List<List<Object?>?>?)
     }
 ```
 
