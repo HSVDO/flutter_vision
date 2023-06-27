@@ -282,12 +282,9 @@ public class Yolo {
                 // Check if the current pixel is part of the object
                 if (segmentationMask[y][x] != 0) {
                     // Check if any neighboring pixel is not part of the object
-                    if (isOutline(segmentationMask, x, y)) {
+                    if (!isOutline(segmentationMask, x, y)) {
                         // Set the pixel in the outline mask to indicate the outline
                         outlineMask[y][x] = 0;
-                    } else {
-                        // Set the pixel in the outline mask to indicate the outline
-                        outlineMask[y][x] = 1;
                     }
                 }
             }
@@ -322,7 +319,7 @@ public class Yolo {
             }
         }
 
-        return numOfNeighbors >= 8;
+        return numOfNeighbors < 9;
     }
 
     public float[][][] processMask_ultralytics(float[][][] protos, float[][] bboxes, int source_width, int source_height, boolean upsample) {
