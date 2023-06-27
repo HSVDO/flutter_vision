@@ -273,8 +273,8 @@ public class Yolo {
         float[][] outlineMask = new float[height][width];
 
         // Iterate over each pixel in the segmentation mask
-        for (int x = (int) box[0]; x <= (int) box[2]; x++) {
-            for (int y = (int) box[1]; y <= (int) box[3]; y++) {
+        for (int y = (int) box[1]; y < (int) box[3]; y++) {
+            for (int x = (int) box[0]; x < (int) box[2]; x++) {
                 // Check if the current pixel is part of the object
                 if (segmentationMask[y][x] != 0) {
                     // Check if any neighboring pixel is not part of the object
